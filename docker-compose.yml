@@ -1,0 +1,12 @@
+# Static portal. Supabase hosts Auth, Postgres and the Edge API.
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+      args:
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:?Set VITE_SUPABASE_URL in the root .env file}
+        VITE_SUPABASE_PUBLISHABLE_KEY: ${VITE_SUPABASE_PUBLISHABLE_KEY:?Set VITE_SUPABASE_PUBLISHABLE_KEY in the root .env file}
+    restart: unless-stopped
+    ports:
+      - "3000:80"
