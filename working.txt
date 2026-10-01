@@ -1,0 +1,717 @@
+================================================================================
+                  RIVER OBSERVATORIES - WCT  |  HOW THIS WEBSITE WORKS
+================================================================================
+
+Last updated: 28 September 2026
+
+
+================================================================================
+1. PROJECT OVERVIEW
+================================================================================
+
+River Observatories for the Indo-Gangetic Plains is a public research portal
+for river science. Visitors can browse 12 river observatories and explore
+hydrology graphs, GIS maps, and interpreted data. Staff (Admin / Researcher)
+have separate tools for data import, dataset management, user administration,
+and audit logging.
+
+Key principle: Public visitors see ONLY aggregate summaries and maps.
+Detailed observation rows and CSV exports are restricted to authorized staff.
+
+
+================================================================================
+2. TECH STACK
+================================================================================
+
+Layer               | Technology
+--------------------|----------------------------------------------------------
+Frontend            | React 18, TypeScript, Vite 5, React Router 6, Tailwind CSS 3
+Charts              | Apache ECharts (via echart.tsx wrapper)
+Maps                | MapLibre GL JS, OpenStreetMap + Esri raster tiles
+Backend / API       | Deno Supabase Edge Function ("portal-api") - single file
+Database            | Supabase Postgres + PostGIS extension
+Auth                | Supabase Auth (email + password) + application User profile
+Data Import         | ExcelJS, CSV parsing, Google Sheets CSV export
+Hosting (container) | Docker + Nginx (static frontend image)
+Fonts               | Google Fonts (Inter, etc.)
+
+
+================================================================================
+3. COMPLETE FILE & FOLDER STRUCTURE
+================================================================================
+
+wct-river-portal/
+│
+├── .env                          # Actual env vars (git-ignored, created from .env.example)
+├── .env.example                  # Template: VITE_SUPABASE_URL, VITE_SUPABASE_PUBLISHABLE_KEY
+├── .gitignore                    # Ignore rules
+├── ARCHITECTURE.md               # High-level architecture doc
+├── HANDOVER.md                   # Developer handover / onboarding doc
+├── README.md                     # Main project readme
+├── TODO.md                       # Pending work items
+├── Makefile                      # Build shortcuts
+├── docker-compose.yml            # Compose config: maps container port 80 → host 3000
+│
+├── docker/
+│   ├── Dockerfile.frontend       # Node 20 build → Nginx 1.27 static serve
+│   └── frontend-nginx.conf       # SPA fallback config, port 80
+│
+├── docs/
+│   └── BACKUP.md                 # Backup and recovery notes
+│
+├── frontend/
+│   ├── index.html                # HTML entry point
+│   ├── package.json              # Dependencies & scripts (dev, build, preview, typecheck)
+│   ├── package-lock.json         # npm lockfile
+│   ├── postcss.config.mjs        # PostCSS config for Tailwind
+│   ├── tailwind.config.ts        # Tailwind theme + custom design tokens
+│   ├── tsconfig.json             # TypeScript config (path alias @/ → src/)
+│   ├── vite.config.ts            # Vite config (loads root .env, port 3000)
+│   │
+│   ├── public/
+│   │   ├── favicon.png           # Site favicon
+│   │   ├── robots.txt            # Search engine directives
+│   │   └── assets/               # River, wildlife, community photos & logo
+│   │
+│   ├── dist/                     # Production build output (generated)
+│   │
+│   └── src/
+│       ├── main.tsx              # React mount + BrowserRouter
+│       ├── App.tsx               # All route definitions + PublicLayout wrapper
+│       ├── index.css             # Global CSS + Tailwind directives
+│       ├── vite-env.d.ts         # Vite type declarations
+│       │
+│       ├── pages/                          # Page-level components
+│       │   ├── home.tsx                    # Landing page (/)
+│       │   ├── rivers.tsx                  # Observatory catalog (/rivers)
+│       │   ├── river-detail.tsx            # Individual river dashboard (/rivers/:riverId)
+│       │   ├── data.tsx                    # Graphs + Interactive Data (/data)
+│       │   ├── gis.tsx                     # GIS / Map view (/gis)
+│       │   ├── about.tsx                   # About page (/about)
+│       │   ├── contact.tsx                 # Contact + data request (/contact)
+│       │   ├── login.tsx                   # Staff login (/login)
+│       │   ├── not-found.tsx               # 404 page
+│       │   │
+│       │   ├── admin/                      # Admin-only pages
+│       │   │   ├── dashboard.tsx           # Admin dashboard (/admin)
+│       │   │   ├── import.tsx              # Data import wizard (/admin/import)
+│       │   │   ├── datasets.tsx            # Dataset management (/admin/datasets)
+│       │   │   ├── geography.tsx           # Rivers & geography CRUD (/admin/rivers)
+│       │   │   ├── users.tsx               # User management (/admin/users)
+│       │   │   └── audit.tsx               # Audit log viewer (/admin/audit)
+│       │   │
+│       │   └── researcher/                 # Researcher-only pages
+│       │       ├── dashboard.tsx           # Researcher dashboard (/researcher)
+│       │       ├── upload.tsx              # Data upload (/researcher/upload)
+│       │       └── submissions.tsx         # Submission tracking (/researcher/submissions)
+│       │
+│       ├── layouts/                        # Layout wrappers with role gates
+│       │   ├── admin-layout.tsx            # Wraps /admin/* with RequireRole("ADMIN")
+│       │   └── researcher-layout.tsx       # Wraps /researcher/* with RequireRole("RESEARCHER")
+│       │
+│       ├── components/                     # Reusable components
+│       │   ├── providers.tsx               # Context providers wrapper
+│       │   │
+│       │   ├── layout/                     # Site shell components
+│       │   │   ├── header.tsx              # Main navigation header + river selector
+│       │   │   ├── footer.tsx              # Site footer
+│       │   │   ├── container.tsx           # Centered container wrapper
+│       │   │   └── logo.tsx                # Logo component
+│       │   │
+│       │   ├── ui/                         # Base UI primitives
+│       │   │   ├── badge.tsx               # Status badges
+│       │   │   ├── button.tsx              # Button component
+│       │   │   ├── button-link.tsx         # Link styled as button
+│       │   │   ├── card.tsx                # Card container
+│       │   │   ├── dialog.tsx              # Modal dialog
+│       │   │   ├── input.tsx               # Text input
+│       │   │   ├── label.tsx               # Form label
+│       │   │   ├── select.tsx              # Dropdown select
+│       │   │   ├── spinner.tsx             # Loading spinner
+│       │   │   ├── state.tsx               # Loading/error/empty states
+│       │   │   ├── table.tsx               # Data table
+│       │   │   └── tabs.tsx                # Tab navigation
+│       │   │
+│       │   ├── auth/                       # Authentication components
+│       │   │   ├── login-form.tsx          # Email+password login form
+│       │   │   └── require-role.tsx        # Role gate wrapper (redirects if unauthorized)
+│       │   │
+│       │   ├── home/                       # Home page sections
+│       │   │   ├── hero-carousel.tsx       # Hero image carousel
+│       │   │   └── feature-cards.tsx       # Feature highlight cards
+│       │   │
+│       │   ├── rivers/                     # River-related components
+│       │   │   ├── rivers-client.tsx       # Observatory catalog grid
+│       │   │   └── river-detail-client.tsx # River dashboard: stats, categories, charts
+│       │   │
+│       │   ├── charts/                     # Charting components
+│       │   │   ├── echart.tsx              # Apache ECharts React wrapper
+│       │   │   ├── timeseries-chart.tsx    # Time series line chart
+│       │   │   └── analysis-charts.tsx     # Seasonal, monthly, annual, distribution charts
+│       │   │
+│       │   ├── data/                       # Data exploration
+│       │   │   └── data-explorer.tsx       # Interactive filter + multi-tab explorer
+│       │   │
+│       │   ├── map/                        # GIS / Map components
+│       │   │   ├── river-map.tsx           # MapLibre map with station markers + layers
+│       │   │   └── map-layer-control.tsx   # Layer toggle controls
+│       │   │
+│       │   ├── import/                     # Data import workflow
+│       │   │   └── import-wizard.tsx       # Multi-step import wizard (upload → map → validate → submit)
+│       │   │
+│       │   ├── portal/                     # Staff portal shell
+│       │   │   └── portal-shell.tsx        # Sidebar navigation shell for admin/researcher
+│       │   │
+│       │   └── admin/                      # Admin-specific components
+│       │       └── stat-card.tsx           # Statistics card for admin dashboard
+│       │
+│       ├── lib/                            # Utilities and services
+│       │   ├── supabase.ts                 # Supabase browser client initialization
+│       │   ├── api.ts                      # API client (wraps Edge Function calls)
+│       │   ├── auth.tsx                    # AuthContext + AuthProvider + useAuth hook
+│       │   ├── observatories.ts            # Fixed 12-river list + 8 research categories
+│       │   ├── format.ts                   # Number/date formatting utilities
+│       │   ├── spreadsheet.ts              # Excel/CSV parsing via ExcelJS
+│       │   ├── page-meta.ts               # Page title/meta management
+│       │   └── utils.ts                    # General utility functions (cn classnames)
+│       │
+│       └── types/                          # TypeScript type definitions
+│           └── index.ts                    # All interfaces: User, Role, River, Dataset,
+│                                           #   Station, Stretch, Hydrology types,
+│                                           #   Import, Submission, AuditLog, etc.
+│
+└── supabase/
+    ├── functions/
+    │   └── portal-api/
+    │       └── index.ts                    # THE ENTIRE BACKEND - single Deno Edge Function
+    │
+    ├── migrations/                         # SQL migrations (apply in filename order)
+    │   ├── 20260926000000_legacy_initial.sql         # Base schema: River, Station, Dataset, etc.
+    │   ├── 20260926000001_lifecycle_hardening.sql     # Constraints and lifecycle rules
+    │   ├── 20260927000000_auth_and_rls.sql           # RLS policies + auth grants
+    │   ├── 20260927000001_river_catalog.sql           # River catalog RPC
+    │   ├── 20260927000002_portal_reads.sql            # Public portal read RPCs
+    │   ├── 20260927000003_filter_options.sql           # Filter option RPCs
+    │   ├── 20260927000004_gis_read.sql                # GIS/GeoJSON RPCs
+    │   ├── 20260927000005_advanced_analytics.sql       # Distribution, extremes, scatter, heatmap RPCs
+    │   ├── 20260927000006_dataset_counts.sql           # Dataset record count RPC
+    │   ├── 20260927000007_staff_hydrology.sql          # Staff-only hydrology RPCs (filtered records)
+    │   ├── 20260927000008_admin_counts.sql             # Admin dashboard stats RPC
+    │   ├── 20260927000009_import_staging.sql            # Import staging table
+    │   ├── 20260927000010_import_validation.sql         # Validate import RPC
+    │   └── 20260927000011_import_commit.sql             # Commit/approve import RPC
+    │
+    └── seeds/
+        ├── 20260927_demo_observations.sql  # 20 synthetic water-level rows + 4 demo sites
+        └── remove_demo_observations.sql    # Script to remove demo data
+
+
+================================================================================
+4. ALL PAGES & ROUTES
+================================================================================
+
+4.1 PUBLIC PAGES (accessible to everyone, no login needed)
+--------------------------------------------------------------------------
+
+Route                           | Page File               | Description
+--------------------------------|-------------------------|----------------------------------
+/                               | home.tsx                | Landing page with hero carousel,
+                                |                         | feature cards, observatory links
+/rivers                         | rivers.tsx              | 12-observatory catalog grid
+/rivers/:riverId                | river-detail.tsx        | Individual river dashboard with
+                                |                         | stats, research categories, charts
+/rivers/:riverId/hydrology      | (redirect)              | Redirects to /data?river=...&tab=graphs
+/data                           | data.tsx                | Graphs tab + Interactive Data
+                                |                         | Exploration tab
+/data?tab=interactive           | data.tsx                | Interactive data explorer
+/gis                            | gis.tsx                 | GIS map view with MapLibre
+/about                          | about.tsx               | About the project
+/contact                        | contact.tsx             | Contact page + data access request
+                                |                         | (opens mailto: email draft)
+/login                          | login.tsx               | Staff sign-in form
+/visualize                      | (redirect)              | Redirects to /data?tab=interactive
+/datasets                       | (redirect)              | Redirects to /rivers
+*                               | not-found.tsx           | 404 page
+
+4.2 ADMIN PAGES (requires ADMIN role)
+--------------------------------------------------------------------------
+
+Route                           | Page File               | Description
+--------------------------------|-------------------------|----------------------------------
+/admin                          | admin/dashboard.tsx     | Admin dashboard with stats,
+                                |                         | recent activity, dataset overview
+/admin/import                   | admin/import.tsx        | Data import wizard (upload file
+                                |                         | or fetch Google Sheet)
+/admin/datasets                 | admin/datasets.tsx      | Dataset list, publish/archive/
+                                |                         | reject controls
+/admin/rivers                   | admin/geography.tsx     | CRUD for rivers, states, districts,
+                                |                         | stretches, monitoring stations
+/admin/users                    | admin/users.tsx         | User management: create, edit role,
+                                |                         | activate/deactivate, reset password
+/admin/audit                    | admin/audit.tsx         | View audit log entries
+
+4.3 RESEARCHER PAGES (requires RESEARCHER or ADMIN role)
+--------------------------------------------------------------------------
+
+Route                           | Page File               | Description
+--------------------------------|-------------------------|----------------------------------
+/researcher                     | researcher/dashboard.tsx| Researcher dashboard with their
+                                |                         | imports and submission stats
+/researcher/upload              | researcher/upload.tsx   | Upload datasets for review
+/researcher/submissions         | researcher/submissions.tsx| Track submission status
+
+
+================================================================================
+5. ROLE-BASED ACCESS CONTROL (RBAC) — DETAILED
+================================================================================
+
+5.1 THE THREE ROLES
+--------------------------------------------------------------------------
+
+Role         | Level | Description
+-------------|-------|----------------------------------------------------------
+VIEWER       |   0   | Default role for new accounts. Can sign in and see their
+             |       | own profile. No staff tools. Same data access as public.
+RESEARCHER   |   1   | Can upload data, create imports, validate data, submit
+             |       | for approval. Can view own imports and submissions.
+ADMIN        |   2   | Full access. Can manage users, rivers, geography, datasets,
+             |       | approve/reject imports, view audit logs, export CSV.
+
+5.2 ROLE HIERARCHY
+--------------------------------------------------------------------------
+
+Roles are HIERARCHICAL. A check for RESEARCHER also passes for ADMIN.
+
+    ADMIN (2) > RESEARCHER (1) > VIEWER (0)
+
+Code (auth.tsx, line 15):
+    const ROLE_LEVEL: Record<Role, number> = { VIEWER: 0, RESEARCHER: 1, ADMIN: 2 };
+
+    hasRole(required) => ROLE_LEVEL[user.role] >= ROLE_LEVEL[required]
+
+5.3 WHERE RBAC IS ENFORCED
+--------------------------------------------------------------------------
+
+LAYER 1 — Frontend (Navigation Gate):
+    • AdminLayout wraps /admin/* with <RequireRole role="ADMIN">
+    • ResearcherLayout wraps /researcher/* with <RequireRole role="RESEARCHER">
+    • RequireRole component checks useAuth().hasRole() and redirects to /login
+      if the user doesn't have the required role.
+
+LAYER 2 — Backend API (Edge Function — the REAL security boundary):
+    • The "caller()" function extracts the Bearer token, verifies it via
+      Supabase Auth, then loads the User profile from the database.
+    • The "requireRole()" function throws 401/403 if the user is missing
+      or doesn't have one of the specified roles.
+    • Each API route explicitly calls requireRole() with the allowed roles.
+
+LAYER 3 — Database (RLS + Grants):
+    • Row Level Security (RLS) policies are defined in the migrations.
+    • Browser roles do NOT have direct table grants.
+    • All data access goes through the Edge Function using the service role key.
+    • The "published_only" flag is passed to RPCs to filter data based on
+      whether the caller is a public visitor or an authorized staff member.
+
+5.4 WHAT EACH ROLE CAN DO
+--------------------------------------------------------------------------
+
+Action                              | PUBLIC | VIEWER | RESEARCHER | ADMIN
+------------------------------------|--------|--------|------------|------
+View home, about, contact           |   ✓    |   ✓    |     ✓      |  ✓
+Browse 12 observatories             |   ✓    |   ✓    |     ✓      |  ✓
+View aggregate hydrology graphs     |   ✓    |   ✓    |     ✓      |  ✓
+View GIS map + public layers        |   ✓    |   ✓    |     ✓      |  ✓
+View published dataset metadata     |   ✓    |   ✓    |     ✓      |  ✓
+Interactive data exploration        |   ✓    |   ✓    |     ✓      |  ✓
+Sign in                             |   ✗    |   ✓    |     ✓      |  ✓
+View own profile (/auth/me)         |   ✗    |   ✓    |     ✓      |  ✓
+Upload/import data                  |   ✗    |   ✗    |     ✓      |  ✓
+Validate imports                    |   ✗    |   ✗    |     ✓      |  ✓
+Submit imports for review           |   ✗    |   ✗    |     ✓      |  ✓
+View own submissions                |   ✗    |   ✗    |     ✓      |  ✓
+Save/manage reports                 |   ✗    |   ✗    |     ✓      |  ✓
+View individual observation rows    |   ✗    |   ✗    |     ✓      |  ✓
+View extremes + scatter plots       |   ✗    |   ✗    |     ✓      |  ✓
+Export CSV data                     |   ✗    |   ✗    |     ✓      |  ✓
+View ALL datasets (any status)      |   ✗    |   ✗    |     ✗      |  ✓
+View ALL imports (all users)        |   ✗    |   ✗    |     ✗      |  ✓
+Approve/reject imports              |   ✗    |   ✗    |     ✗      |  ✓
+Publish/archive/reject datasets     |   ✗    |   ✗    |     ✗      |  ✓
+Review submissions                  |   ✗    |   ✗    |     ✗      |  ✓
+Manage users (create/edit/deactivate)|  ✗    |   ✗    |     ✗      |  ✓
+Manage rivers & geography (CRUD)    |   ✗    |   ✗    |     ✗      |  ✓
+View audit logs                     |   ✗    |   ✗    |     ✗      |  ✓
+View admin dashboard + stats        |   ✗    |   ✗    |     ✗      |  ✓
+
+5.5 NEW USER CREATION
+--------------------------------------------------------------------------
+
+• New users are created ONLY by an ADMIN through /admin/users.
+• ADMIN creates the user in Supabase Auth and sets their role in the User table.
+• Default role is VIEWER if not specified.
+• The first admin must be manually set via direct database access after
+  creating their Supabase Auth account.
+
+
+================================================================================
+6. DATA MODEL (DATABASE TABLES)
+================================================================================
+
+Core Tables:
+    • River              — 12 river observatories (Ganga, Chambal, Gandak, etc.)
+    • MonitoringStation   — Physical observation stations along rivers
+    • RiverStretch        — Named river segments/stretches
+    • State               — Indian states
+    • District            — Districts within states
+    • HydrologyParameter  — Measured parameters (water level, flow, etc.)
+    • DataSource           — Origin of datasets (agency, project, etc.)
+
+Data Tables:
+    • Dataset             — Named datasets with status lifecycle
+                            (DRAFT → SUBMITTED → APPROVED → PUBLISHED / REJECTED / ARCHIVED)
+    • HydrologyRecord     — Individual observations (the actual measurement data)
+
+Import/Workflow Tables:
+    • Import              — Tracks data import jobs (file upload or Google Sheet fetch)
+    • ImportStage          — Staging area for raw imported rows before validation
+    • ImportError          — Validation errors per imported row
+    • Submission           — Researcher submissions for admin review
+                            (PENDING → APPROVED / REJECTED)
+
+GIS Tables:
+    • GisLayer            — Named GIS layers with visibility settings
+
+User/Auth Tables:
+    • User                — Application user profile (synced with Supabase Auth)
+                            Fields: id, email, name, role, active, createdAt
+
+Logging:
+    • AuditLog            — Action audit trail
+    • Report              — Saved visualizations/queries by staff
+
+Key SQL RPC Functions:
+    • wct_portal_rivers       — Public river listing with station/dataset counts
+    • wct_portal_river        — Detailed single river view
+    • wct_filter_options      — Available filter values for hydrology explorer
+    • wct_hydrology_metrics   — Aggregate stats: summary, timeseries, annual, monthly, seasonal, heatmap
+    • wct_hydrology_distribution — Histogram + percentile statistics
+    • wct_hydrology_compare   — Compare data across stations, years, seasons, periods
+    • wct_hydrology_extremes  — Highest/lowest observations (staff only)
+    • wct_hydrology_scatter   — Scatter plot data (staff only)
+    • wct_filtered_records    — Individual rows with pagination (staff only)
+    • wct_geojson             — GeoJSON features for map rendering
+    • wct_validate_import     — Validate staged import data
+    • wct_commit_import       — Approve and commit import to production tables
+    • wct_dataset_counts      — Per-dataset record counts
+    • wct_admin_counts        — Admin dashboard aggregate stats
+
+
+================================================================================
+7. AUTHENTICATION FLOW
+================================================================================
+
+Step 1: User visits /login and enters email + password.
+
+Step 2: Frontend calls supabase.auth.signInWithPassword({ email, password }).
+         Supabase Auth returns an access token (JWT) + refresh token.
+
+Step 3: Frontend calls GET /auth/me on the Edge Function with the JWT
+         in the Authorization header.
+
+Step 4: Edge Function:
+         a. Extracts the Bearer token.
+         b. Calls Supabase Auth API (GET /auth/v1/user) to verify the token.
+         c. Loads the matching User profile from the "User" table.
+         d. Checks that the user is active.
+         e. Returns the user profile (id, email, name, role, active).
+
+Step 5: Frontend stores the user in React context (AuthProvider).
+         The useAuth() hook provides: user, loading, login, logout, hasRole.
+
+Step 6: On sign-out, supabase.auth.signOut() clears the session.
+
+Step 7: Auth state changes are monitored via onAuthStateChange listener.
+         If SIGNED_OUT event fires, user state is cleared.
+
+
+================================================================================
+8. API ROUTES (EDGE FUNCTION ENDPOINTS)
+================================================================================
+
+The single Edge Function at supabase/functions/portal-api/index.ts handles
+ALL backend logic. Base URL: {SUPABASE_URL}/functions/v1/portal-api
+
+8.1 PUBLIC ENDPOINTS (no auth needed)
+--------------------------------------------------------------------------
+
+GET  /health                    → Service health check
+GET  /rivers                    → List all rivers with stats (published data only)
+GET  /rivers/:id                → Single river detail (published data only)
+GET  /hydrology/filters         → Available filter options
+GET  /hydrology/summary         → Aggregate summary stats
+GET  /hydrology/timeseries      → Time series data
+GET  /hydrology/annual          → Annual trends
+GET  /hydrology/monthly         → Monthly trends
+GET  /hydrology/seasonal        → Seasonal analysis
+GET  /hydrology/heatmap         → Year×Month heatmap matrix
+GET  /hydrology/distribution    → Histogram + percentile stats
+GET  /hydrology/compare         → Compare by station/year/season/period
+GET  /gis/layers                → Public GIS layers
+GET  /gis/geojson/:kind         → GeoJSON features
+GET  /gis/nearest               → (empty — not implemented)
+GET  /datasets                  → Published dataset metadata
+GET  /datasets/:id              → Single dataset detail
+
+8.2 STAFF ENDPOINTS (RESEARCHER or ADMIN)
+--------------------------------------------------------------------------
+
+GET  /auth/me                   → Current user profile
+GET  /hydrology                 → Paginated observation rows (record-level)
+GET  /hydrology/extremes        → Top/bottom values
+GET  /hydrology/scatter         → Scatter plot data
+GET  /hydrology/export          → CSV download of filtered records
+GET  /imports                   → List own imports (all imports for ADMIN)
+GET  /imports/:id               → Import detail with validation errors
+POST /imports                   → Create new import job (file metadata)
+POST /imports/:id/rows          → Upload staged rows (batches of up to 250)
+POST /imports/:id/validate      → Run validation on staged data
+POST /imports/:id/submit        → Submit for admin review
+POST /imports/google-sheets     → Fetch data from a public Google Sheet
+GET  /submissions               → List own submissions (all for ADMIN)
+POST /submissions               → Create a new submission
+GET  /reports                   → List saved reports
+POST /reports                   → Save a report
+DELETE /reports/:id             → Delete own report
+
+8.3 ADMIN-ONLY ENDPOINTS
+--------------------------------------------------------------------------
+
+POST /rivers                    → Create river
+PATCH /rivers/:id               → Update river
+DELETE /rivers/:id              → Delete river
+POST /datasets                  → Create dataset
+POST /datasets/:id/publish      → Publish approved dataset
+POST /datasets/:id/reject       → Reject dataset
+POST /datasets/:id/archive      → Archive dataset
+POST /imports/:id/approve       → Approve import (commit data)
+POST /submissions/:id/review    → Review submission (approve/reject)
+GET  /users                     → List all users
+POST /users                     → Create user (in Auth + profile)
+PATCH /users/:id                → Update user (role, name, password, active)
+DELETE /users/:id               → Deactivate user (soft delete)
+POST /states                    → Create state
+PATCH /states/:id               → Update state
+DELETE /states/:id              → Delete state
+POST /districts                 → Create district
+PATCH /districts/:id            → Update district
+DELETE /districts/:id           → Delete district
+POST /river-stretches           → Create stretch
+PATCH /river-stretches/:id      → Update stretch
+DELETE /river-stretches/:id     → Delete stretch
+POST /stations                  → Create monitoring station
+PATCH /stations/:id             → Update station
+DELETE /stations/:id            → Delete station
+GET  /audit-logs                → View audit log (last 200 entries)
+GET  /admin/stats               → Admin dashboard summary stats
+
+
+================================================================================
+9. DATA FLOW
+================================================================================
+
+9.1 PUBLIC GRAPH VIEWING
+--------------------------------------------------------------------------
+
+    User opens /data or /rivers/:riverId
+        → React component calls api.get('/hydrology/summary?riverId=...')
+        → api.ts attaches the Supabase publishable key + optional JWT
+        → Fetch hits Edge Function at /hydrology/summary
+        → Edge Function calls RPC wct_hydrology_metrics with published_only=true
+        → Postgres executes aggregate SQL (no individual rows exposed)
+        → JSON summary returned → ECharts renders graph
+
+9.2 MAP VIEWING
+--------------------------------------------------------------------------
+
+    User opens /gis
+        → RiverMap component requests /gis/layers (public layers only)
+        → Requests /gis/geojson/:kind for station/river geometry
+        → MapLibre renders GeoJSON features on top of OSM/Esri tiles
+        → Station markers are clickable with popup info
+
+9.3 STAFF DATA IMPORT (Admin or Researcher)
+--------------------------------------------------------------------------
+
+    Step 1: Staff opens /admin/import or /researcher/upload
+    Step 2: Selects import source:
+            a) File upload (CSV or XLSX) — parsed client-side with ExcelJS
+            b) Google Sheet URL — fetched server-side as CSV export
+    Step 3: ImportWizard sends POST /imports with headers + row count
+    Step 4: Client sends rows in batches via POST /imports/:id/rows
+    Step 5: Client sends POST /imports/:id/validate with column mapping
+            → Edge Function calls RPC wct_validate_import
+            → Returns validation summary (valid/invalid/duplicate counts)
+    Step 6: Researcher submits via POST /imports/:id/submit
+            → Creates a Submission record (status: PENDING)
+    Step 7: Admin reviews at /admin/datasets or via submission review
+            → POST /submissions/:id/review with decision (APPROVED/REJECTED)
+            → If approved: calls RPC wct_commit_import to move staged data
+              into production HydrologyRecord table
+
+9.4 DATASET LIFECYCLE
+--------------------------------------------------------------------------
+
+    DRAFT → SUBMITTED → APPROVED → PUBLISHED
+                      ↘ REJECTED
+    PUBLISHED → ARCHIVED
+
+    Only PUBLISHED datasets and their records are visible to the public.
+
+9.5 USER SIGN-IN
+--------------------------------------------------------------------------
+
+    Login form → Supabase Auth (signInWithPassword)
+        → JWT token → GET /auth/me → User profile + role
+        → React context updates → staff navigation appears
+
+
+================================================================================
+10. THE 12 RIVER OBSERVATORIES
+================================================================================
+
+The river list is FIXED in frontend/src/lib/observatories.ts.
+Adding a new observatory requires code changes (not just database rows).
+
+ #  | Name           | Slug           | Description
+----|----------------|----------------|----------------------------------------------
+ 1  | Ganga          | ganga          | Ganga–Padma system, Himalaya to delta
+ 2  | Chambal        | chambal        | Major Yamuna tributary, aquatic wildlife
+ 3  | Gandak         | gandak         | Himalayan river, Nepal to Bihar
+ 4  | Kosi           | kosi           | Dynamic shifting channels
+ 5  | Ghaghra        | ghaghra        | Large transboundary Ganga tributary
+ 6  | Son            | son            | Southern Ganga tributary, sandbar habitats
+ 7  | Mahananda      | mahananda      | Eastern Himalayan foothills to Ganga
+ 8  | Beas           | beas           | Western Himalayan, HP to Punjab
+ 9  | Sharda         | sharda         | India–Nepal transboundary
+10  | Parman         | parman         | Local floodplain observatory
+11  | Bagmati        | bagmati        | Nepal hills to north Bihar
+12  | Budhi Gandak   | budhi-gandak   | Floodplains of north Bihar
+
+
+================================================================================
+11. THE 8 RESEARCH CATEGORIES
+================================================================================
+
+Each river dashboard can display insights across these themes:
+
+Key            | Label                       | Description
+---------------|-----------------------------|------------------------------------------
+hydrology      | Hydrology                   | Flow, river level, seasonal variation
+climate        | Climate                     | Rainfall, temperature, seasonal conditions
+gis            | GIS & Habitats              | River networks, monitoring locations
+wildlife       | Wildlife Status             | River-dependent species, habitat observations
+fisheries      | Fisheries                   | Fish communities, fishing activity
+social         | Socio-Economic Development  | People, livelihoods, floodplain change
+conservation   | Conservation Prospects      | Pressures, protection, restoration
+policy         | Policy & Legal Frameworks   | Planning, governance, legal context
+
+
+================================================================================
+12. ENVIRONMENT VARIABLES
+================================================================================
+
+Root .env (created from .env.example):
+
+    VITE_SUPABASE_URL=https://your-project.supabase.co
+    VITE_SUPABASE_PUBLISHABLE_KEY=your-browser-publishable-key
+
+These are embedded at BUILD TIME by Vite. Rebuild after changing.
+
+Server-side (Supabase Edge Function environment, NOT in .env):
+
+    SUPABASE_URL          — Set automatically by Supabase
+    SUPABASE_SERVICE_ROLE_KEY — Set in Supabase dashboard (NEVER expose client-side)
+
+
+================================================================================
+13. HOW TO RUN LOCALLY
+================================================================================
+
+1. Clone the repository
+2. Copy .env.example to .env and fill in your Supabase project values
+3. cd frontend
+4. npm ci                    (install dependencies)
+5. npm run dev               (start dev server at http://localhost:3000)
+
+Other commands:
+    npm run typecheck         — TypeScript type check
+    npm run build             — Production build to frontend/dist/
+    npm run preview           — Preview the production build locally
+
+Docker:
+    docker compose up --build -d    (from repo root, builds + serves at :3000)
+    docker compose down              (stop)
+
+
+================================================================================
+14. DEPLOYMENT
+================================================================================
+
+• Frontend: Built as static files → served by Nginx in Docker container.
+• Backend: Edge Function deployed to Supabase (separate from frontend).
+• Database: Hosted on Supabase Postgres.
+• Auth: Supabase Auth service.
+
+Docker Compose maps container port 80 → host port 3000.
+Browser calls Supabase directly; the Docker container does NOT run the database
+or Edge Function.
+
+Migrations are applied to the Supabase database in filename order.
+The Edge Function (portal-api/index.ts) is deployed via Supabase CLI or dashboard.
+
+
+================================================================================
+15. KEY DESIGN DECISIONS
+================================================================================
+
+1. PUBLIC = AGGREGATE ONLY: Public visitors never see individual observation
+   rows or get CSV exports. Only summaries, charts, and maps.
+
+2. SINGLE EDGE FUNCTION: The entire backend is one file (index.ts, ~400 lines).
+   No separate Express server. All routing is done with path parsing.
+
+3. SERVICE KEY PATTERN: The Edge Function uses the Supabase service role key
+   for all database access. The browser only has the publishable key.
+   This means RLS is bypassed server-side, and the Edge Function itself
+   is the access control boundary.
+
+4. FIXED RIVER LIST: The 12 observatories are hardcoded in observatories.ts.
+   Database rivers must match these slugs to appear in the UI.
+
+5. EMAIL-BASED DATA REQUESTS: Data access requests open a mailto: draft.
+   There is no in-app request/approval workflow for external users.
+
+6. IMPORT STAGING: All imports go through staging → validation → approval.
+   Nothing reaches the production HydrologyRecord table without admin approval.
+
+7. NO GLOBAL STATE LIBRARY: Auth context is the only global state.
+   Everything else is local component state or URL query parameters.
+
+
+================================================================================
+16. KNOWN LIMITATIONS
+================================================================================
+
+• /gis/nearest returns an empty list — river geometry not supplied
+• Several research categories have UI but need verified datasets
+• Demo seed contains 20 SYNTHETIC water-level observations (not real data)
+• Unsupported hydrology subroutes return HTTP 501
+• Contact page opens email draft — no in-app request system
+• PostGIS installed in "public" schema — review security finding
+• No automated tests or lint scripts in package.json
+• Build produces chunks >500 kB (ExcelJS is large)
+
+
+================================================================================
+END OF DOCUMENT
+================================================================================
